@@ -1,0 +1,31 @@
+📊 Summary of Each File
+
+
+main.py  	  Receives HTTP requests			  Receptionist
+
+database.py 	  Connects to SQLite Bridge
+
+models.py	  Creates database tables  
+                  Blueprint 0f the table
+
+schemas.py	  Validates request/response 
+                  data Registration form
+
+crud.py	          Performs database operations	            	          Worker who talks to the  	 		  database
+
+
+
+
+
+
+
+
+Code	                     Purpose
+
+DATABASE_URL :	     Tells SQLAlchemy where           		     the database is. 
+
+create_engine()  :    Creates the connection 			     to the database.
+
+SessionLocal  :	     Creates a new database 			     session for each 				     request.
+
+Base	:              Parent class for all 			      database tables (models).
