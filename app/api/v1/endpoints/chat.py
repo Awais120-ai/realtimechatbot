@@ -319,7 +319,6 @@ async def upload_chat_file(
         "content_type": file.content_type or "application/octet-stream",
     }
 
-
 @router.delete(
     "/session/{conversation_id}",
     status_code=status.HTTP_200_OK,
@@ -332,13 +331,14 @@ async def clear_chat_session(
 
     service = MessageService(db)
 
-    if hasattr(service, "clear_session"):
-        await service.clear_session(
-            conversation_id=conversation_id,
-            user_id=current_user.id,
-        )
+    result = await service.clear_session(
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
 
     return {
         "status": "success",
-        "detail": f"Session cleared for conversation {conversation_id}",
+        "detail": f"Chat cleared successfully.",
+        "conversation_id": conversation_id,
+        "cleared_count": result["cleared_count"],
     }

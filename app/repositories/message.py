@@ -144,3 +144,26 @@ class MessageRepository:
         await self.db.refresh(message)
 
         return message
+
+
+    async def clear_conversation(
+        self,
+        conversation_id: int,
+    ) -> int:
+
+        result = await self.db.execute(
+            select(Message).where(
+                Message.conversation_id == conversation_id,
+                Message.is_deleted.is_(False),
+            )
+        )
+
+        messages = result.scalars().all()
+
+        for message in messages:
+            message.is_deleted = True
+            message.content = None
+
+        await self.db.commit()
+
+        return len(messages)

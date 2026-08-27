@@ -270,3 +270,23 @@ class MessageService:
         return await self.repository.delete_message(
             message_id=message_id,
         )
+
+    async def clear_session(
+        self,
+        conversation_id: int,
+        user_id: int,
+    ):
+        # Make sure current user belongs to this conversation
+        await self._check_membership(
+            conversation_id=conversation_id,
+            user_id=user_id,
+        )
+
+        cleared_count = await self.repository.clear_conversation(
+            conversation_id=conversation_id,
+        )
+
+        return {
+            "conversation_id": conversation_id,
+            "cleared_count": cleared_count,
+        }
