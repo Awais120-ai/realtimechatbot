@@ -1,4 +1,4 @@
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import Conversation, conversation_members
@@ -43,6 +43,32 @@ class ConversationService:
 
             if participant is None:
                 raise ValueError("Selected user does not exist.")
+
+
+            # =================================================
+            # LOCK DIRECT CHAT USER PAIR
+            # Prevent duplicate conversations during
+            # simultaneous requests.
+            # =================================================
+
+            user_a = min(
+                int(current_user_id),
+                int(participant_id),
+            )
+
+            user_b = max(
+                int(current_user_id),
+                int(participant_id),
+            )
+
+            await self.db.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        user_a,
+                        user_b,
+                    )
+                )
+)
 
             # =================================================
             # EXISTING DIRECT CONVERSATION CHECK
