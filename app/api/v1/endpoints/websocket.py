@@ -285,6 +285,367 @@ async def websocket_endpoint(
             event_type = data.get("type") or data.get("event")
 
             # =================================================
+            # WEBRTC CALL SIGNALING
+            # =================================================
+
+            if event_type in (
+                "call_invite",
+                "call_accept",
+                "call_reject",
+                "call_end",
+                "webrtc_offer",
+                "webrtc_answer",
+                "webrtc_ice_candidate",
+            ):
+
+                # -------------------------------------------------
+                # Get target user
+                # -------------------------------------------------
+
+                target_user_id = (
+                    data.get("target_user_id")
+                    or data.get("targetUserId")
+                    or data.get("to_user_id")
+                    or data.get("toUserId")
+                )
+
+                if not target_user_id:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "target_user_id is required.",
+                        }
+                    )
+                    continue
+
+                # -------------------------------------------------
+                # Validate target user ID
+                # -------------------------------------------------
+
+                try:
+                    target_user_id = int(target_user_id)
+
+                except (ValueError, TypeError):
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "target_user_id must be an integer.",
+                        }
+                    )
+                    continue
+
+                # -------------------------------------------------
+                # Prevent self calls
+                # -------------------------------------------------
+
+                if target_user_id == user_id:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "You cannot call yourself.",
+                        }
+                    )
+                    continue
+
+                # -------------------------------------------------
+                # Get conversation ID
+                # -------------------------------------------------
+
+                conversation_id = (
+                    data.get("conversation_id")
+                    or data.get("conversationId")
+                )
+
+                if not conversation_id:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "conversation_id is required.",
+                        }
+                    )
+                    continue
+
+                # -------------------------------------------------
+                # Validate conversation ID
+                # -------------------------------------------------
+
+                try:
+                    conversation_id = int(conversation_id)
+
+                except (ValueError, TypeError):
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": (
+                                "conversation_id must be an integer."
+                            ),
+                        }
+                    )
+                    continue
+
+                # -------------------------------------------------
+                # Verify both users belong to conversation
+                # -------------------------------------------------
+
+                async with AsyncSessionLocal() as db:
+
+                    current_user_result = await db.execute(
+                        text(
+                            """
+                            SELECT 1
+                            FROM conversation_members
+                            WHERE conversation_id = :conversation_id
+                            AND user_id = :user_id
+                            LIMIT 1
+                            """
+                        ),
+                        {
+                            "conversation_id": conversation_id,
+                            "user_id": user_id,
+                        },
+                    )
+
+                    current_user_is_member = (
+                        current_user_result.fetchone()
+                        is not None
+                    )
+
+                    if not current_user_is_member:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": (
+                                    "You are not a member "
+                                    "of this conversation."
+                                ),
+                            }
+                        )
+                        continue
+
+                    target_user_result = await db.execute(
+                        text(
+                            """
+                            SELECT 1
+                            FROM conversation_members
+                            WHERE conversation_id = :conversation_id
+                            AND user_id = :target_user_id
+                            LIMIT 1
+                            """
+                        ),
+                        {
+                            "conversation_id": conversation_id,
+                            "target_user_id": target_user_id,
+                        },
+                    )
+
+                    target_user_is_member = (
+                        target_user_result.fetchone()
+                        is not None
+                    )
+
+                    if not target_user_is_member:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": (
+                                    "Target user is not a member "
+                                    "of this conversation."
+                                ),
+                            }
+                        )
+                        continue
+
+                # -------------------------------------------------
+                # Prepare signaling message
+                # -------------------------------------------------
+
+                signaling_message = dict(data)
+
+                signaling_message["type"] = event_type
+
+                signaling_message["from_user_id"] = user_id
+                signaling_message["fromUserId"] = user_id
+
+                signaling_message["conversation_id"] = (
+                    conversation_id
+                )
+                signaling_message["conversationId"] = (
+                    conversation_id
+                )
+
+                # -------------------------------------------------
+                # CALL END
+                # -------------------------------------------------
+
+                if event_type == "call_end":
+
+                    duration = data.get("duration", 0)
+                    call_type = data.get(
+                        "call_type",
+                        "audio",
+                    )
+
+                    try:
+                        duration = int(duration)
+                    except (ValueError, TypeError):
+                        duration = 0
+
+                    if call_type not in (
+                        "audio",
+                        "video",
+                    ):
+                        call_type = "audio"
+
+                    # ---------------------------------------------
+                    # Save call history as a chat message
+                    # ---------------------------------------------
+
+                    call_content = json.dumps(
+                        {
+                            "call_type": call_type,
+                            "duration": duration,
+                        }
+                    )
+
+                    async with AsyncSessionLocal() as db:
+
+                        service = MessageService(db)
+
+                        message_in = MessageCreate(
+                            conversation_id=conversation_id,
+                            content=call_content,
+                            message_type="call",
+                            file_url=None,
+                            file_name=None,
+                            file_size=None,
+                            mime_type=None,
+                        )
+
+                        try:
+
+                            message = await service.create_message(
+                                message_in=message_in,
+                                sender_id=user_id,
+                            )
+
+                        except Exception as exc:
+
+                            print(
+                                "CALL MESSAGE CREATE ERROR:",
+                                repr(exc),
+                            )
+
+                            await websocket.send_json(
+                                {
+                                    "type": "error",
+                                    "message": str(exc),
+                                }
+                            )
+
+                            continue
+
+                    # -----------------------------------------
+                    # Get conversation members
+                    # -----------------------------------------
+
+                    result = await db.execute(
+                        text(
+                            """
+                            SELECT user_id
+                            FROM conversation_members
+                            WHERE conversation_id = :conversation_id
+                            """
+                        ),
+                        {
+                            "conversation_id": conversation_id,
+                        },
+                    )
+
+                    member_ids = [
+                        row[0]
+                        for row in result.fetchall()
+                    ]
+
+                    # ---------------------------------------------
+                    # Prepare chat message
+                    # ---------------------------------------------
+
+                    message_data = {
+                        "type": "message",
+                        "id": message.id,
+                        "conversation_id": message.conversation_id,
+                        "sender_id": message.sender_id,
+                        "content": message.content,
+                        "message_type": message.message_type,
+                        "file_url": None,
+                        "file_name": None,
+                        "file_size": None,
+                        "mime_type": None,
+                        "is_read": message.is_read,
+                        "is_delivered": getattr(
+                            message,
+                            "is_delivered",
+                            False,
+                        ),
+                        "is_edited": message.is_edited,
+                        "edited_at": (
+                            message.edited_at.isoformat()
+                            if message.edited_at
+                            else None
+                        ),
+                        "is_deleted": message.is_deleted,
+                        "created_at": message.created_at.isoformat(),
+                    }
+
+                    print(
+                        "CALL HISTORY MESSAGE:",
+                        message_data,
+                    )
+
+                    # ---------------------------------------------
+                    # Send call message to both users
+                    # ---------------------------------------------
+
+                    for member_id in member_ids:
+
+                        await manager.send_to_user(
+                            user_id=member_id,
+                            message=message_data,
+                        )
+
+                    # ---------------------------------------------
+                    # Also forward original call_end event
+                    # ---------------------------------------------
+
+                    await manager.send_to_user(
+                        user_id=target_user_id,
+                        message=signaling_message,
+                    )
+
+                    continue
+
+
+                # -------------------------------------------------
+                # Forward normal signaling event
+                # -------------------------------------------------
+
+                print(
+                    "========== WEBRTC SIGNALING =========="
+                )
+                print("Event:", event_type)
+                print("From:", user_id)
+                print("To:", target_user_id)
+                print("Conversation:", conversation_id)
+                print("=======================================")
+
+                await manager.send_to_user(
+                    user_id=target_user_id,
+                    message=signaling_message,
+                )
+
+                continue
+
+            # =================================================
             # TYPING / STOP TYPING
             # =================================================
 
@@ -1323,6 +1684,7 @@ async def websocket_endpoint(
                 "text",
                 "image",
                 "file",
+                "call",
             }
 
             if message_type not in allowed_message_types:
@@ -1332,7 +1694,7 @@ async def websocket_endpoint(
                         "type": "error",
                         "message": (
                             "message_type must be "
-                            "text, image, or file."
+                            "text, image, file, or call."
                         ),
                     }
                 )
@@ -1368,7 +1730,10 @@ async def websocket_endpoint(
             # IMAGE / FILE VALIDATION
             # =================================================
 
-            else:
+            elif message_type in (
+                "image",
+                "file",
+            ):
 
                 if not file_url:
 
@@ -1427,6 +1792,7 @@ async def websocket_endpoint(
                     continue
 
                 try:
+
                     file_size = int(file_size)
 
                 except (ValueError, TypeError):
@@ -1451,6 +1817,33 @@ async def websocket_endpoint(
                             "message": (
                                 "file_size cannot "
                                 "be negative."
+                            ),
+                        }
+                    )
+
+                    continue
+
+
+            # =================================================
+            # CALL MESSAGE
+            # =================================================
+
+            elif message_type == "call":
+
+                # Call history does not use attachments.
+                file_url = None
+                file_name = None
+                file_size = None
+                mime_type = None
+
+                if not content:
+
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": (
+                                "content is required "
+                                "for call messages."
                             ),
                         }
                     )
