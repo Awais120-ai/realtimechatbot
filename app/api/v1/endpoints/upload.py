@@ -32,6 +32,14 @@ ALLOWED_FILE_TYPES = {
     "application/zip",
 }
 
+ALLOWED_AUDIO_TYPES = {
+    "audio/webm",
+    "audio/wav",
+    "audio/mpeg",
+    "audio/mp4",
+    "audio/ogg",
+}
+
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -52,6 +60,7 @@ async def upload_file(
     if (
         content_type not in ALLOWED_IMAGE_TYPES
         and content_type not in ALLOWED_FILE_TYPES
+        and content_type not in ALLOWED_AUDIO_TYPES
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -92,8 +101,10 @@ async def upload_file(
 
     if content_type in ALLOWED_IMAGE_TYPES:
         message_type = "image"
+    elif content_type in ALLOWED_AUDIO_TYPES:
+        message_type = "audio"
     else:
-        message_type = "file"
+        message_type = "file"   
 
     file_url = f"/uploads/{unique_filename}"
 

@@ -485,6 +485,20 @@ async def websocket_endpoint(
                         "audio",
                     )
 
+                    call_initiator_id = data.get("call_initiator_id")
+
+                    try:
+                        call_initiator_id = (
+                            int(call_initiator_id)
+                            if call_initiator_id is not None
+                            else None
+                        )
+                    except (ValueError, TypeError):
+                        call_initiator_id = None
+
+                    if not call_initiator_id:
+                        call_initiator_id = user_id
+
                     try:
                         duration = int(duration)
                     except (ValueError, TypeError):
@@ -504,6 +518,7 @@ async def websocket_endpoint(
                         {
                             "call_type": call_type,
                             "duration": duration,
+                            "call_initiator_id": call_initiator_id,
                         }
                     )
 
@@ -1685,6 +1700,7 @@ async def websocket_endpoint(
                 "image",
                 "file",
                 "call",
+                "audio",
             }
 
             if message_type not in allowed_message_types:
@@ -1694,7 +1710,7 @@ async def websocket_endpoint(
                         "type": "error",
                         "message": (
                             "message_type must be "
-                            "text, image, file, or call."
+                            "text, image, file, audio, or call."
                         ),
                     }
                 )
