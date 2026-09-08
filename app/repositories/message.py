@@ -1,11 +1,13 @@
+from app.models import conversation_user_state
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func,or_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.conversation_user_state import ConversationUserState
 
-from app.models.message import Message
+from app.models.message import Message 
 
 
 class MessageRepository:
@@ -56,22 +58,39 @@ class MessageRepository:
 
         return result.scalars().first()
 
-    async def get_by_conversation(
-        self,
-        conversation_id: int,
-    ):
-
-        result = await self.db.execute(
-            select(Message)
-            .options(selectinload(Message.sender))
-            .where(
-                Message.conversation_id == conversation_id,
-                Message.is_deleted.is_(False),
+    async def get_by_conversation(self, conversation_id, user_id):
+     query = (
+        select(Message)
+        .options(selectinload(Message.sender))
+        .outerjoin(
+            ConversationUserState,
+            (
+                ConversationUserState.conversation_id
+                == Message.conversation_id
             )
-            .order_by(Message.created_at)
+            & (
+                ConversationUserState.user_id
+                == user_id
+            ),
         )
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.is_deleted.is_(False),
+        )
+        .where(
+            or_(
+                ConversationUserState.cleared_at.is_(None),
+                Message.created_at > ConversationUserState.cleared_at,
+            )
+        )
+        .order_by(Message.created_at.asc())
+     )
 
-        return result.scalars().all()
+     result = await self.db.execute(query)
+
+     return result.scalars().all()
+
+
 
     async def mark_as_read(
         self,
@@ -146,24 +165,38 @@ class MessageRepository:
         return message
 
 
-    async def clear_conversation(
-        self,
-        conversation_id: int,
-    ) -> int:
+    async def clear_conversation(self, conversation_id, user_id):
+    # Get messages currently visible to this user
+     messages = await self.get_by_conversation(
+        conversation_id,
+        user_id,
+     )
 
-        result = await self.db.execute(
-            select(Message).where(
-                Message.conversation_id == conversation_id,
-                Message.is_deleted.is_(False),
-            )
+     cleared_count = len(messages)
+
+    # Check whether this user already has a state
+     result = await self.db.execute(
+        select(ConversationUserState).where(
+            ConversationUserState.conversation_id == conversation_id,
+            ConversationUserState.user_id == user_id,
         )
+    )
 
-        messages = result.scalars().all()
+     state = result.scalar_one_or_none()
 
-        for message in messages:
-            message.is_deleted = True
-            message.content = None
+    # Current time
+     now = datetime.now(timezone.utc)
 
-        await self.db.commit()
+     if state:
+        state.cleared_at = now
+     else:
+        state = ConversationUserState(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            cleared_at=now,
+        )
+        self.db.add(state)
 
-        return len(messages)
+     await self.db.commit()
+
+     return cleared_count

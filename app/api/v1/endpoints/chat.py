@@ -2,7 +2,20 @@ import os
 import uuid
 from typing import List, Any
 
-from fastapi import APIRouter, Depends, status, HTTPException, UploadFile, File
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    status,
+    HTTPException,
+    UploadFile,
+    File,
+)
+
+from app.services.conversation_notification import (
+    ConversationNotificationService,
+)
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -341,4 +354,76 @@ async def clear_chat_session(
         "detail": f"Chat cleared successfully.",
         "conversation_id": conversation_id,
         "cleared_count": result["cleared_count"],
+    }
+
+
+@router.get(
+    "/conversations/{conversation_id}/notification-settings",
+)
+async def get_chat_notification_settings(
+    conversation_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+
+    conv_service = ConversationService(db)
+
+    is_member = await conv_service.is_member(
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
+
+    if not is_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this conversation.",
+        )
+
+    service = ConversationNotificationService(db)
+
+    enabled = await service.get_settings(
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
+
+    return {
+        "conversation_id": conversation_id,
+        "notifications_enabled": enabled,
+    }
+
+
+@router.put(
+    "/conversations/{conversation_id}/notification-settings",
+)
+async def set_chat_notification_settings(
+    conversation_id: int,
+    notifications_enabled: bool = Body(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+
+    conv_service = ConversationService(db)
+
+    is_member = await conv_service.is_member(
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
+
+    if not is_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this conversation.",
+        )
+
+    service = ConversationNotificationService(db)
+
+    enabled = await service.set_settings(
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+        notifications_enabled=notifications_enabled,
+    )
+
+    return {
+        "conversation_id": conversation_id,
+        "notifications_enabled": enabled,
     }

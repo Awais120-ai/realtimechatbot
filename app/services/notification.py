@@ -8,6 +8,10 @@ from app.repositories.notification import NotificationRepository
 from app.schemas.notification import NotificationRead
 from app.services.websocket_service import manager
 
+from app.repositories.conversation_notification import (
+    ConversationNotificationRepository,
+)
+
 
 class NotificationService:
 
@@ -79,8 +83,21 @@ class NotificationService:
         notifications = []
         body_text = content if content else f"Sent a {message_type}"
 
+        notification_state_repository = (
+            ConversationNotificationRepository(self.db)
+            )
+
         for recipient_id in member_ids:
+
             if recipient_id == sender.id:
+                continue
+
+            is_muted = await notification_state_repository.is_muted(
+            conversation_id=conversation_id,
+            user_id=recipient_id,
+            )
+
+            if is_muted:
                 continue
 
             data_payload = json.dumps(

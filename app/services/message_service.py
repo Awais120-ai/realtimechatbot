@@ -89,8 +89,9 @@ class MessageService:
         )
 
         return await self.repository.get_by_conversation(
-            conversation_id
-        )
+            conversation_id,
+            user_id,
+        )   
 
     async def get_message(
         self,
@@ -284,6 +285,7 @@ class MessageService:
 
         cleared_count = await self.repository.clear_conversation(
             conversation_id=conversation_id,
+            user_id=user_id,
         )
 
         return {
