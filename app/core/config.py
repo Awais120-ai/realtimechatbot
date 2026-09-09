@@ -21,19 +21,34 @@ class Settings(BaseSettings):
 
     @property
     def ASYNC_SQLALCHEMY_DATABASE_URI(self) -> str:
-        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return (
+        f"postgresql+asyncpg://"
+        f"{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+        f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}"
+        f"/{self.POSTGRES_DB}"
+    )
 
     @property
     def SYNC_SQLALCHEMY_DATABASE_URI(self) -> str:
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return (
+        f"postgresql://"
+        f"{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+        f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}"
+        f"/{self.POSTGRES_DB}"
+        f"?sslmode=require"
+    )
 
+    REDIS_URL: str = ""
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
 
     @property
-    def REDIS_URL(self) -> str:
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+    def REDIS_CONNECTION_URL(self) -> str:
+     if self.REDIS_URL:
+        return self.REDIS_URL
+
+     return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",

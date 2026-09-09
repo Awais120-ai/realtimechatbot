@@ -6,7 +6,8 @@ engine = create_async_engine(
     settings.ASYNC_SQLALCHEMY_DATABASE_URI,
     echo=False,
     future=True,
-    pool_pre_ping=True
+    pool_pre_ping=True, 
+    connect_args={"ssl": True}
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -16,7 +17,7 @@ AsyncSessionLocal = async_sessionmaker(
     autocommit=False,
     autoflush=False
 )
-
+    
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:

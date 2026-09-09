@@ -3,8 +3,8 @@ from app.core.config import settings
 
 celery_app = Celery(
     "worker",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL
+    broker=settings.REDIS_CONNECTION_URL,
+    backend=settings.REDIS_CONNECTION_URL
 )
 
 celery_app.conf.update(
