@@ -59,6 +59,7 @@ origins = [
     "http://192.168.18.83:5174",
     "https://192.168.18.83:5174",
     "http://localhost:3000",
+    "https://realtimechatbot-frontend.vercel.app",
 ]
 
 # Merge settings origins if available
