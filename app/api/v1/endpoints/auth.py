@@ -23,6 +23,7 @@ from app.schemas.user import UserCreate, UserRead, UserUpdate, UserChangePasswor
 from app.services.user_service import UserService
 from app.cache.redis import redis_client
 from app.cache.keys import get_token_blacklist_key
+from app.core import cloudinary
 
 router = APIRouter()
 
@@ -228,6 +229,8 @@ async def upload_profile_picture(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
 
+    import cloudinary.uploader
+
     allowed_types = {
         "image/jpeg",
         "image/png",
@@ -241,63 +244,29 @@ async def upload_profile_picture(
             detail="Only JPG, PNG, GIF and WEBP images are allowed.",
         )
 
-    profile_dir = Path("uploads/profile")
-    profile_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    extension = Path(
-        file.filename or ""
-    ).suffix.lower()
-
-    if not extension:
-        extension = ".jpg"
-
-    filename = (
-        f"{uuid4().hex}{extension}"
-    )
-
-    file_path = profile_dir / filename
-
-    file_size = 0
-    max_size = 5 * 1024 * 1024
-
     try:
-        with file_path.open("wb") as buffer:
+        contents = await file.read()
 
-            while True:
+        max_size = 5 * 1024 * 1024
 
-                chunk = await file.read(
-                    1024 * 1024
-                )
+        if len(contents) > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail="Profile picture must not exceed 5 MB.",
+            )
 
-                if not chunk:
-                    break
+        result = cloudinary.uploader.upload(
+            contents,
+            folder="realtimechatbot/profile",
+            resource_type="image",
+        )
 
-                file_size += len(chunk)
+        current_user.profile_picture = result["secure_url"]
 
-                if file_size > max_size:
+        await db.commit()
+        await db.refresh(current_user)
 
-                    file_path.unlink(
-                        missing_ok=True
-                    )
-
-                    raise HTTPException(
-                        status_code=413,
-                        detail="Profile picture must not exceed 5 MB.",
-                    )
-
-                buffer.write(chunk)
+        return current_user
 
     finally:
         await file.close()
-
-    current_user.profile_picture = (
-        f"/uploads/profile/{filename}"
-    )
-
-    await db.commit()
-    await db.refresh(current_user)
-
-    return current_user
