@@ -1,8 +1,8 @@
-from pathlib import Path
+
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -18,32 +18,6 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# ============================================================
-# UPLOAD DIRECTORY
-# ============================================================
-
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-# Existing upload route
-app.mount(
-    "/uploads",
-    StaticFiles(directory=str(UPLOAD_DIR)),
-    name="uploads",
-)
-
-# Static route for files currently being returned by
-# the upload API as /static/uploads/...
-STATIC_DIR = Path("static")
-STATIC_UPLOAD_DIR = STATIC_DIR / "uploads"
-
-STATIC_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-app.mount(
-    "/static",
-    StaticFiles(directory=str(STATIC_DIR)),
-    name="static",
-)
 
 
 # ============================================================
