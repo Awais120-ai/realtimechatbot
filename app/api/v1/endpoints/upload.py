@@ -1,5 +1,4 @@
-from pathlib import Path
-from uuid import uuid4
+import cloudinary.uploader
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
@@ -11,8 +10,7 @@ from app.models.user import User
 router = APIRouter()
 
 
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 
 
 ALLOWED_IMAGE_TYPES = {
@@ -67,37 +65,26 @@ async def upload_file(
             detail="This file type is not allowed.",
         )
 
-    extension = Path(file.filename).suffix.lower()
+    contents = await file.read()
 
-    unique_filename = f"{uuid4().hex}{extension}"
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size must not exceed 10 MB.",
+        )
 
-    file_path = UPLOAD_DIR / unique_filename
+    resource_type = "image" if content_type in ALLOWED_IMAGE_TYPES else "auto"
 
-    file_size = 0
+    result = cloudinary.uploader.upload(
+        contents,
+        folder="realtimechatbot/chat",
+        resource_type=resource_type,
+    )
 
-    try:
-        with file_path.open("wb") as buffer:
+    file_url = result["secure_url"]
+    file_size = len(contents)
 
-            while True:
-                chunk = await file.read(1024 * 1024)
-
-                if not chunk:
-                    break
-
-                file_size += len(chunk)
-
-                if file_size > MAX_FILE_SIZE:
-                    file_path.unlink(missing_ok=True)
-
-                    raise HTTPException(
-                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        detail="File size must not exceed 10 MB.",
-                    )
-
-                buffer.write(chunk)
-
-    finally:
-        await file.close()
+    await file.close()
 
     if content_type in ALLOWED_IMAGE_TYPES:
         message_type = "image"
@@ -106,7 +93,6 @@ async def upload_file(
     else:
         message_type = "file"   
 
-    file_url = f"/uploads/{unique_filename}"
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
