@@ -1,9 +1,9 @@
-# pyrefly: ignore [missing-import]
-import cloudinary
 import os
+import cloudinary
 
 cloudinary.config(
-    cloud_name=os.getenv("zbjl3qbm"),
-    api_key=os.getenv("832965437621832"),
-    api_secret=os.getenv("hsc_3apaeb3STCa12LMj1dZvY6U"),
-)
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME", "zbjl3qbm"),
+    api_key=os.getenv("CLOUDINARY_API_KEY", "832965437621832"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET", "hsc_3apaeb3STCa12LMj1dZvY6U"),
+    secure=True,
+) 
