@@ -1,7 +1,6 @@
-import os
-import uuid
-from typing import List, Any
 
+from typing import List, Any
+import cloudinary.uploader
 from fastapi import (
     APIRouter,
     Body,
@@ -315,20 +314,19 @@ async def upload_chat_file(
     current_user: User = Depends(get_current_user),
 ) -> Any:
 
-    upload_dir = "static/uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-
-    file_extension = file.filename.split(".")[-1] if "." in file.filename else ""
-    unique_filename = f"{uuid.uuid4()}.{file_extension}"
-    file_path = os.path.join(upload_dir, unique_filename)
-
     content = await file.read()
-    with open(file_path, "wb") as buffer:
-        buffer.write(content)
+
+    result = cloudinary.uploader.upload(
+        content,
+        folder="realtimechatbot/chat",
+        resource_type="auto",
+    )
+
+    file_url = result["secure_url"]
 
     return {
         "filename": file.filename,
-        "url": f"/static/uploads/{unique_filename}",
+        "url": file_url,
         "content_type": file.content_type or "application/octet-stream",
     }
 
